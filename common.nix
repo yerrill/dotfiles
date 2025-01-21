@@ -7,7 +7,7 @@
     extraGroups = [ "wheel" "sudo" "networkmanager" ];
     packages = with pkgs; [
 
-    ]
+    ];
   };
 
   nixpkgs.config.allowUnfree = true;
