@@ -17,7 +17,7 @@ in
     services.displayManager.sddm.enable = true;
     services.desktopManager.plasma6.enable = true;
 
-    server.xserver.xkb = {
+    services.xserver.xkb = {
       layout = "us";
       variant = "";
     };

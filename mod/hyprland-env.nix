@@ -33,6 +33,9 @@ in
     environment.systemPackages = with pkgs; [
       kitty
       dolphin
+      rofi-wayland
+      waybar
+      dunst
     ];
   };
 }
