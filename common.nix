@@ -18,6 +18,7 @@
     wget
     tree
     alacritty
+    vlc
   ];
 
   environment.sessionVariables = {
