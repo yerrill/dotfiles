@@ -1,0 +1,12 @@
+[Unit]
+Description=Periodically Update Cloudflare DNS
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/bash -c "cd /home/z/cf; source venv/bin/activate; python /home/z/cf/cfdns.py; deactivate"
+Restart=always
+RestartSec=3600
+EnvironmentFile=/home/z/cf/.env
+
+[Install]
+WantedBy=multi-user.target
