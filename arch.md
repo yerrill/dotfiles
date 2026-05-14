@@ -2,24 +2,27 @@
 
 ## First install
 
-`pacstrap -K /mnt base linux linux-firmware grub networkmanager neovim less curl man sudo`.
+`pacstrap -K /mnt base linux linux-firmware grub efibootmgr networkmanager neovim less curl man sudo`.
 
 ### Disk / Grub for VM
 
-- [Arch Wiki - Partitioning](https://wiki.archlinux.org/title/Partitioning#BIOS/GPT_layout_example)
+- [Arch Wiki - Partitioning](https://wiki.archlinux.org/title/Partitioning#UEFI/GPT_layout_example)
 - [GNU GRUB Manual](https://www.gnu.org/software/grub/manual/grub/html_node/BIOS-installation.html#BIOS-installation)
-- [Arch Wiki - GRUB BIOS](https://wiki.archlinux.org/title/GRUB#BIOS_systems)
+- [Arch Wiki - GRUB UEFI](https://wiki.archlinux.org/title/GRUB#UEFI_systems)
 
-#### Partitioning
+#### UEFI Partitioning
 
-1. `parted /dev/sda`
-2. (parted) `mklabel gpt` - set label
-3. (parted) `mkpart primary 1MiB 2MiB` - make boot
-4. (parted) `set 1 bios_grub on`
-5. (parted) `mkpart primary linux-swap 2MiB 4GiB` - make swap
-6. (parted) `mkpart primary ext4 2051MiB 100%` - make home
-7. (parted) `print` - to verify
-8. (parted) `quit`
+1. `gdisk /dev/nvme0n1`
+2. (gdisk) `o` # New GPT
+3. (gdisk) `n`, `<DEFAULT>`, `<DEFAULT>`, `+1G`, `EF00` # EFI
+4. (gdisk) `n`, `<DEFAULT>`, `<DEFAULT>`, `+4G`, `8200` # Swap
+5. (gdisk) `n`, `<DEFAULT>`, `<DEFAULT>`, `<DEFAULT>`, `8304` # Swap
+6. (gdisk) `p` # Print and verify
+7. (gdisk) `w`, `y`
+
+- EFI: EF00
+- Swap: 8200
+- Linux x86-64 root: 8304
 
 #### Activating
 
