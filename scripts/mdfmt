@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""
+Reformat prose so each sentence sits on its own line (semantic line breaks).
+
+Usage:
+  format_sentences.py [--check | --diff] [PATH ...]
+
+With no PATH (or PATH '-'), reads stdin and writes the result to stdout.
+With one or more PATHs, rewrites files in place. Directories are searched
+recursively for files whose extension is in EXTENSIONS.
+
+  --check   Write nothing; exit non-zero if any input needs reformatting.
+  --diff    Print a unified diff instead of writing (also exits non-zero
+            when there are changes).
+"""
+
+import argparse
+import difflib
+import re
+import sys
+from pathlib import Path
+
+# Extensions considered when a directory is given. Explicitly named files are
+# always processed regardless of extension.
+EXTENSIONS = {".md", ".markdown", ".txt", ".rst"}
+
+# Periods after these words are NOT treated as the end of a sentence.
+ABBREVIATIONS = [
+    "Mr",
+    "Mrs",
+    "Ms",
+    "Dr",
+    "Prof",
+    "Sr",
+    "Jr",
+    "St",
+    "vs",
+    "etc",
+    "e.g",
+    "i.e",
+    "Inc",
+    "Ltd",
+    "Co",
+    "No",
+    "Fig",
+]
+
+_SENTINEL = "\x00"  # temporary stand-in for a protected period
+
+
+def split_sentences(text: str) -> str:
+    # 1. Hide periods that belong to abbreviations so they don't trigger a break.
+    for abbr in ABBREVIATIONS:
+        text = re.sub(rf"\b{re.escape(abbr)}\.", abbr + _SENTINEL, text)
+
+    # 2. A sentence end (plus any trailing quotes/brackets) followed by
+    #    horizontal whitespace and another word -> break the line.
+    #    Existing newlines and blank lines between paragraphs are left intact.
+    text = re.sub(r"([.!?][\"'’”)\]]*)[ \t]+(?=\S)", r"\1\n", text)
+
+    # 3. Restore the protected periods.
+    return text.replace(_SENTINEL, ".")
+
+
+def iter_paths(paths):
+    for raw in paths:
+        p = Path(raw)
+
+        if p.is_dir():
+            for child in sorted(p.rglob("*")):
+                if child.is_file() and child.suffix.lower() in EXTENSIONS:
+                    yield child
+        else:
+            yield p
+
+
+def _emit_diff(original, formatted, label):
+    sys.stdout.writelines(
+        difflib.unified_diff(
+            original.splitlines(keepends=True),
+            formatted.splitlines(keepends=True),
+            fromfile=label,
+            tofile=f"{label} (formatted)",
+        )
+    )
+
+
+def process_stdin(check: bool, diff: bool) -> int:
+    original = sys.stdin.read()
+    formatted = split_sentences(original)
+    changed = formatted != original
+
+    if diff:
+        _emit_diff(original, formatted, "stdin")
+    elif not check:
+        sys.stdout.write(formatted)
+
+    return 1 if (changed and (check or diff)) else 0
+
+
+def process_files(paths, check: bool, diff: bool) -> int:
+    changed_any = False
+
+    for path in iter_paths(paths):
+        try:
+            original = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            print(f"skip (unreadable): {path}", file=sys.stderr)
+            continue
+
+        formatted = split_sentences(original)
+
+        if formatted == original:
+            continue
+
+        changed_any = True
+
+        if diff:
+            _emit_diff(original, formatted, str(path))
+        elif check:
+            print(path)  # report the file that needs formatting
+        else:
+            path.write_text(formatted, encoding="utf-8")
+            print(f"formatted: {path}")
+
+    return 1 if (changed_any and (check or diff)) else 0
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description="Put each sentence on its own line.")
+    parser.add_argument(
+        "paths", nargs="*", help="files or directories ('-' or none for stdin)"
+    )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--check",
+        action="store_true",
+        help="write nothing; exit non-zero if anything would change",
+    )
+    mode.add_argument(
+        "--diff", action="store_true", help="print a unified diff instead of writing"
+    )
+    args = parser.parse_args(argv)
+
+    if not args.paths or args.paths == ["-"]:
+        return process_stdin(args.check, args.diff)
+
+    return process_files(args.paths, args.check, args.diff)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
