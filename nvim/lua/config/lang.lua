@@ -1,10 +1,11 @@
 -- Format Router
 vim.api.nvim_create_autocmd("BufWritePost", {
-    group = vim.api.nvim_create_augroup("BlackFormat", { clear = true }),
+    group = vim.api.nvim_create_augroup("Formatter", { clear = true }),
     -- pattern = "*.py",
     callback = function(args)
         supported = {
             ["python"] = python_format,
+            ["rust"] = rust_format,
         }
 
         if supported[vim.bo.filetype] then
@@ -13,9 +14,21 @@ vim.api.nvim_create_autocmd("BufWritePost", {
     end,
 })
 
+-- Run / Test Router
+vim.keymap.set("n", "<leader>pr", function()
+    supported = {
+        ["python"] = python_run,
+        ["rust"] = rust_run,
+    }
+
+    if supported[vim.bo.filetype] then
+        vim.cmd(supported[vim.bo.filetype])
+    end
+end, { desc = "Run file or tests" })
+
 -- Python
 vim.lsp.enable "pyright"
-vim.keymap.set("n", "<leader>pr", "<cmd>! python %<CR>", { desc = "Run Python file" })
+python_run = "!python %"
 
 function python_format(args)
     -- Run black on the saved file
@@ -26,6 +39,18 @@ function python_format(args)
     end)
 end
 
-
 -- Lua
 vim.lsp.enable "lua_ls"
+
+-- Rust
+vim.lsp.enable "rust_analyzer"
+rust_run = "!cargo test"
+
+function rust_format(args)
+    -- Run cargo format on project
+    vim.fn.system({ "cargo", "fmt" })
+    -- Reload the buffer to pick up changes
+    vim.api.nvim_buf_call(args.buf, function()
+        vim.cmd("silent! edit")
+    end)
+end
