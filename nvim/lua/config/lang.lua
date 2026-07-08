@@ -6,6 +6,7 @@ vim.api.nvim_create_autocmd("BufWritePost", {
         supported = {
             ["python"] = python_format,
             ["rust"] = rust_format,
+            ["html"] = html_format,
         }
 
         if supported[vim.bo.filetype] then
@@ -49,6 +50,16 @@ rust_run = "!cargo test"
 function rust_format(args)
     -- Run cargo format on project
     vim.fn.system({ "cargo", "fmt" })
+    -- Reload the buffer to pick up changes
+    vim.api.nvim_buf_call(args.buf, function()
+        vim.cmd("silent! edit")
+    end)
+end
+
+-- HTML
+function html_format(args)
+    -- Run prettier on file
+    vim.fn.system({ "prettier", "--write", args.file })
     -- Reload the buffer to pick up changes
     vim.api.nvim_buf_call(args.buf, function()
         vim.cmd("silent! edit")
