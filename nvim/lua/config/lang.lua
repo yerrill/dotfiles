@@ -5,7 +5,7 @@ vim.api.nvim_create_autocmd("BufWritePost", {
     callback = function(args)
         supported = {
             ["python"] = python_format,
-            ["rust"] = rust_format,
+--          ["rust"] = rust_format,
             ["html"] = html_format,
         }
 
@@ -48,12 +48,7 @@ vim.lsp.enable "rust_analyzer"
 rust_run = "!cargo test"
 
 function rust_format(args)
-    -- Run cargo format on project
-    vim.fn.system({ "cargo", "fmt" })
-    -- Reload the buffer to pick up changes
-    vim.api.nvim_buf_call(args.buf, function()
-        vim.cmd("silent! edit")
-    end)
+    vim.lsp.buf.format({ bufnr = args.buf })
 end
 
 -- HTML
