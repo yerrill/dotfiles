@@ -1,0 +1,46 @@
+# pihole.service
+[Unit]
+Description=pihole
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=%t/containers
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=always
+TimeoutStopSec=70
+ExecStartPre=/bin/rm \
+        -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+        --cidfile=%t/%n.ctr-id \
+        --cgroups=no-conmon \
+        --rm \
+        --sdnotify=conmon \
+        -d \
+        --replace \
+        --name=pihole \
+        -t \
+        -p 53:53/tcp \
+        -p 53:53/udp \
+        -p 80:80/tcp \
+        -p 443:443/tcp \
+        --env TZ=America/New_York \
+        --env FTLCONF_webserver_api_password=PASSWORD \
+        --env FTLCONF_dns_listeningMode=all \
+        -v /usr/share/etc-pihole:/etc/pihole \
+        --cap-add=NET_ADMIN \
+        --cap-add=SYS_TIME \
+        --cap-add=SYS_NICE \
+        docker.io/pihole/pihole
+ExecStop=/usr/bin/podman stop \
+        --ignore -t 10 \
+        --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm \
+        -f \
+        --ignore -t 10 \
+        --cidfile=%t/%n.ctr-id
+Type=notify
+NotifyAccess=all
+
+[Install]
+WantedBy=default.target
