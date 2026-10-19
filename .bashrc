@@ -5,6 +5,8 @@
 # If not running interactively, don't do anything
 [[ $- != *i* ]] && return
 
+export PATH=$PATH:/home/zach/.bin
+
 alias ls='ls -lh --color=auto'
 alias grep='rg --color=auto'
 alias df='df -h --total'
