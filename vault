@@ -46,6 +46,12 @@ def decrypt(passphrase):
         check=True,
     )
     plain_file_name = cmd.stdout.decode("utf-8")
+
+    try:
+        input(f'Decrypt {plain_file_name}?')
+    except KeyboardInterrupt:
+        sys.exit(0)
+
     temp_path = TMPFS / plain_file_name
 
     if temp_path.exists():
