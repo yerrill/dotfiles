@@ -136,56 +136,81 @@ def lookup_mask(mask_file_name: str, ledger: list[dict[str, str]]) -> str | None
 ################################################################################
 
 
-def add(
+def add_one(
     plain_file_path: Path,
     ledger: list[dict[str, str]],
     working_directory: Path,
     passphrase: str,
-):
+) -> list[dict[str, str]]:
     plain_file_name = plain_file_path.name
     mask_file_name = generate_file_name(working_directory)
     cypher_file_path = working_directory / mask_file_name
     encrypt_file(plain_file_path, cypher_file_path, passphrase)
-    ledger.append(new_entry(str(plain_file_name), mask_file_name))
-    dump_ledger(ledger, working_directory, passphrase)
     print(f"Encrypted file as: {cypher_file_path}")
+    ledger.append(new_entry(str(plain_file_name), mask_file_name))
+    return ledger
 
 
-def v_open(
+def mode_add(
+    plain_file_paths: list[Path],
+    ledger: list[dict[str, str]],
+    working_directory: Path,
+    passphrase: str,
+):
+    for p in plain_file_paths:
+        ledger = add_one(p, ledger, working_directory, passphrase)
+
+    dump_ledger(ledger, working_directory, passphrase)
+
+
+def open_one(
     cypher_file_path: Path,
     ledger: list[dict[str, str]],
     tmpfs_directory: Path,
     passphrase: str,
-):
+) -> list[dict[str, str]]:
     mask_file_name = cypher_file_path.name
     plain_file_name = lookup_mask(mask_file_name, ledger)
 
     if not plain_file_name:
         print(f"Could not find file in ledger: {mask_file_name}")
-        sys.exit(6)
+        return ledger
 
     temp_path = tmpfs_directory / plain_file_name
 
     if temp_path.exists():
         print(f"Decrypt path already exists: {temp_path}")
-        sys.exit(3)
+        return ledger
 
     decrypt_file(cypher_file_path, temp_path, passphrase)
     print(f"Decrypted file as: {temp_path.resolve().as_posix()}")
+    return ledger
 
 
-def drop(
+def mode_open(
+    cypher_file_paths: list[Path],
+    ledger: list[dict[str, str]],
+    tmpfs_directory: Path,
+    passphrase: str,
+):
+    for p in cypher_file_paths:
+        ledger = open_one(p, ledger, tmpfs_directory, passphrase)
+
+
+def mode_drop(
     cypher_file_paths: list[Path],
     ledger: list[dict[str, str]],
     working_directory: Path,
     passphrase: str,
 ):
+    ledger_len = len(ledger)
     cypher_file_names = list(map(lambda p: p.name, cypher_file_paths))
     ledger = list(filter(lambda l: l[FIELD_MASK] not in cypher_file_names, ledger))
     dump_ledger(ledger, working_directory, passphrase)
+    print(f"Dropped items: {ledger_len - len(ledger)}")
 
 
-def v_list(ledger: list[dict[str, str]]):
+def mode_list(ledger: list[dict[str, str]]):
     print("\n".join(map(lambda l: f"{l[FIELD_MASK]}: {l[FIELD_PLAIN]}", ledger)))
 
 
@@ -232,15 +257,13 @@ if __name__ == "__main__":
 
     # Mode Switch
     if mode in ["add"]:
-        for p in get_paths():
-            add(p, ledger, working_directory, passphrase)
+        mode_add(get_paths(), ledger, working_directory, passphrase)
     elif mode in ["open"]:
-        for p in get_paths():
-            v_open(p, ledger, TMPFS, passphrase)
+        mode_open(get_paths(), ledger, TMPFS, passphrase)
     elif mode in ["drop"]:
-        drop(get_paths(), ledger, working_directory, passphrase)
+        mode_drop(get_paths(), ledger, working_directory, passphrase)
     elif mode in ["list"]:
-        v_list(ledger)
+        mode_list(ledger)
     else:
         print(f"Invalid mode: {mode}")
         sys.exit(1)
