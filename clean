@@ -1,1 +1,41 @@
 #! /usr/bin/python3
+
+import sys
+from pathlib import Path
+
+
+def substitute(c: str) -> str:
+    replace = [
+        (" ", "_"),
+        ("[", ""),
+        ("]", ""),
+        ("(", ""),
+        (")", ""),
+        ("'", ""),
+        ('"', ""),
+    ]
+
+    for original, replacement in replace:
+        if c == original:
+            return replacement
+
+    if c.isascii():
+        return c
+
+    return ""
+
+
+def keep(c: str) -> bool:
+    return c != ""
+
+
+def clean(path: Path):
+    parent = path.parent
+    cleaned = "".join(filter(keep, map(substitute, list(path.name))))
+    print(f"{path.name} -> {cleaned}")
+    path.replace(parent / cleaned)
+
+
+if __name__ == "__main__":
+    for p in sys.argv[1:]:
+        clean(Path(p))
