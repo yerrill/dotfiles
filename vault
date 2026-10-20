@@ -3,82 +3,191 @@
 # vault lock <file> - run file and file name through GPG and write output
 # vault open <file> - decrypt file to tmpfs and stdout the path
 
+# vault add <file>  - add the file to the vault at cwd, encrypt and store entry
+# vault open <file> - lookup file name (or hash?) in ledger, decrypt to tmpfs
+# vault list        - List all files in ledger
+# vault drop <file> - lookup file name (or hash?) in ledger, drop entry leaving file itself
+
+
 import sys
 import subprocess
+import json
+import random
 from pathlib import Path
 
+FIELD_PLAIN = "plain"
+FIELD_MASK = "mask"
+ENTRY_FIELDS = [FIELD_PLAIN , FIELD_MASK]
 TMPFS = Path("/tmp/").resolve()
-mode = sys.argv[1]
-path = Path(sys.argv[2])
+LEDGER_FILE = ".ledger"
 
+################################################################################
+# Ledger entries
+################################################################################
 
-def encrypt(passphrase):
-    plain_file_name = path.name.encode("utf-8")
+def new_entry(plain_name: str, mask_name: str) -> dict[str, str]:
+    return {
+        FIELD_PLAIN: plain_name,
+        FIELD_MASK: mask_name
+    }
+
+def dump_ledger(ledger: list[dict[str, str]], working_directory: Path, passphrase: str):
+    plain_ledger = json.dumps(ledger)
+
     cmd = subprocess.run(
-        ["gpg", "--batch", "--passphrase", passphrase, "-c"],
-        input=plain_file_name,
+        [
+            "gpg",
+            "--batch",
+            "--passphrase",
+            passphrase,
+            "-c",
+        ],
+        input=bytes(plain_ledger.encode("utf-8")),
         capture_output=True,
         check=True,
     )
-    cypher_file_name = bytes(cmd.stdout).hex()
+
+    out = (working_directory / LEDGER_FILE).write_bytes(cmd.stdout)
+
+def get_ledger(working_directory: Path, passphrase: str) -> list[dict[str, str]]:
+    ledger_path = working_directory / LEDGER_FILE
+
+    if not ledger_path.exists():
+        dump_ledger([], working_directory, passphrase)
+        return []
+
+    encrypted_ledger = ledger_path.read_bytes()
+
+    cmd = subprocess.run(
+        [
+            "gpg",
+            "--batch",
+            "--passphrase",
+            passphrase,
+            "-d",
+        ],
+        input=encrypted_ledger,
+        capture_output=True,
+        check=True,
+    )
+
+    plain_ledger = json.loads(cmd.stdout)
+
+    return plain_ledger
+
+
+################################################################################
+# Utils
+################################################################################
+
+def generate_file_name(working_directory: Path) -> str:
+    name = None
+
+    for _ in range(0, 1000):
+        name = random.randbytes(8).hex()
+
+        if not (working_directory / name).exists():
+            break;
+
+    if not name:
+        print("Was not able to generate a random name for file")
+        sys.exit(5)
+
+    return name
+
+def encrypt_file(plain_file_path: Path, cypher_file_path: Path, passphrase: str):
     cmd = subprocess.run(
         [
             "gpg",
             "--batch",
             "--output",
-            cypher_file_name,
+            cypher_file_path.resolve().as_posix(),
             "--passphrase",
             passphrase,
             "-c",
-            path.resolve().as_posix(),
+            plain_file_path.resolve().as_posix(),
         ],
         check=True,
     )
-    print(f"Encrypted as: {cypher_file_name}")
 
-
-def decrypt(passphrase):
-    cypher_file_name = bytes.fromhex(path.name)
+def decrypt_file(cypher_file_path: Path, plain_file_path: Path, passphrase: str):
     cmd = subprocess.run(
-        ["gpg", "--batch", "--passphrase", passphrase, "-d"],
-        input=cypher_file_name,
-        capture_output=True,
+        [
+            "gpg",
+            "--batch",
+            "--output",
+            plain_file_path.resolve().as_posix(),
+            "--passphrase",
+            passphrase,
+            "-d",
+            cypher_file_path.resolve().as_posix(),
+        ],
         check=True,
     )
-    plain_file_name = cmd.stdout.decode("utf-8")
 
-    try:
-        input(f'Decrypt {plain_file_name}?')
-    except KeyboardInterrupt:
-        sys.exit(0)
+def lookup_mask(mask_file_name: str, ledger: list[dict[str, str]]) -> str | None:
+    return next((x[FIELD_PLAIN] for x in ledger if x[FIELD_MASK] == mask_file_name), None)
 
-    temp_path = TMPFS / plain_file_name
+################################################################################
+# Commands
+################################################################################
+
+def add(plain_file_path: Path,  ledger: list[dict[str, str]], working_directory: Path, passphrase: str):
+    plain_file_name = plain_file_path.name # .encode("utf-8")
+    mask_file_name = generate_file_name(working_directory)
+    cypher_file_path = working_directory / mask_file_name
+    encrypt_file(plain_file_path, cypher_file_path, passphrase)
+    ledger.append(new_entry(str(plain_file_name), mask_file_name))
+    dump_ledger(ledger, working_directory, passphrase)
+    print(f'Encrypted file as: {cypher_file_path}')
+
+def v_open(cypher_file_path: Path, ledger: list[dict[str, str]], tmpfs_directory: Path, passphrase: str):
+    mask_file_name = cypher_file_path.name
+    plain_file_name = lookup_mask(mask_file_name, ledger)
+
+    if not plain_file_name:
+        print(f'Could not find file in ledger: {mask_file_name}')
+        sys.exit(6)
+
+    temp_path = tmpfs_directory / plain_file_name
 
     if temp_path.exists():
         print(f"Decrypt path already exists: {temp_path}")
         sys.exit(3)
 
-    cmd = subprocess.run(
-        [
-            "gpg",
-            "--batch",
-            "--output",
-            temp_path,
-            "--passphrase",
-            passphrase,
-            "-d",
-            path.resolve().as_posix(),
-        ],
-        check=True,
-    )
-    print(f"Decrypted as: {temp_path.as_posix()}")
+    decrypt_file(cypher_file_path, temp_path, passphrase)
+    print(f'Decrypted file as: {temp_path.resolve().as_posix()}')
+
+def v_list(ledger: list[dict[str, str]]):
+    print("\n".join(map(lambda l: f'{l[FIELD_MASK]}: {l[FIELD_PLAIN]}', ledger)))
+
+def drop(cypher_file_path: Path, ledger: list[dict[str, str]], working_directory: Path, passphrase: str):
+    cypher_file_name = cypher_file_path.name
+    ledger = list(filter(lambda l: l[FIELD_MASK] != cypher_file_name, ledger))
+    dump_ledger(ledger, working_directory, passphrase)
+    print(f'Dropped {cypher_file_name}')
 
 
-if __name__ == "__main__":
-    if not path.exists():
-        print(f"Path does not exist: {path}")
+
+################################################################################
+# Main
+################################################################################
+
+def get_path() -> Path:
+    given_path = Path(sys.argv[2])
+
+    # Check file exists
+    if not given_path.exists():
+        print(f"Path does not exist: {given_path}")
         sys.exit(2)
 
+    return given_path
+
+if __name__ == "__main__":
+    mode = sys.argv[1]
+    working_directory = Path.cwd()
+
+    # Check standard tmpfs is a temporary filesystem
     cmd = subprocess.run(
         ["findmnt", "-o", "FSTYPE", TMPFS.as_posix()], capture_output=True, check=True
     )
@@ -87,12 +196,21 @@ if __name__ == "__main__":
         print(f"{TMPFS} not a tmpfs")
         sys.exit(3)
 
-    passphrase = input("Passphrase: ").encode("utf-8")
+    # Prompt passphrase
+    passphrase = input("Passphrase: ") # .encode("utf-8")
 
-    if mode in ["lock", "l", "e"]:
-        encrypt(passphrase)
-    elif mode in ["open", "o", "d"]:
-        decrypt(passphrase)
+    # Decrypt ledger
+    ledger = get_ledger(working_directory, passphrase)
+
+    # Mode Switch
+    if mode in ["add"]:
+        add(get_path(), ledger, working_directory, passphrase)
+    elif mode in ["open"]:
+        v_open(get_path(), ledger, TMPFS, passphrase)
+    elif mode in ["list"]:
+        v_list(ledger)
+    elif mode in ["drop"]:
+        drop(get_path(), ledger, working_directory, passphrase)
     else:
         print(f"Invalid mode: {mode}")
         sys.exit(1)
