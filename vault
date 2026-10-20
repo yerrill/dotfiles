@@ -1,8 +1,5 @@
 #! /usr/bin/python3
 
-# vault lock <file> - run file and file name through GPG and write output
-# vault open <file> - decrypt file to tmpfs and stdout the path
-
 # vault add <file>  - add the file to the vault at cwd, encrypt and store entry
 # vault open <file> - lookup file name (or hash?) in ledger, decrypt to tmpfs
 # vault list        - List all files in ledger
