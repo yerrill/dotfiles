@@ -5,7 +5,6 @@
 # vault list        - List all files in ledger
 # vault drop <file> - lookup file name (or hash?) in ledger, drop entry leaving file itself
 
-
 import sys
 import subprocess
 import json
@@ -14,7 +13,7 @@ from pathlib import Path
 
 FIELD_PLAIN = "plain"
 FIELD_MASK = "mask"
-ENTRY_FIELDS = [FIELD_PLAIN , FIELD_MASK]
+ENTRY_FIELDS = [FIELD_PLAIN, FIELD_MASK]
 TMPFS = Path("/tmp/").resolve()
 LEDGER_FILE = ".ledger"
 
@@ -22,11 +21,10 @@ LEDGER_FILE = ".ledger"
 # Ledger entries
 ################################################################################
 
+
 def new_entry(plain_name: str, mask_name: str) -> dict[str, str]:
-    return {
-        FIELD_PLAIN: plain_name,
-        FIELD_MASK: mask_name
-    }
+    return {FIELD_PLAIN: plain_name, FIELD_MASK: mask_name}
+
 
 def dump_ledger(ledger: list[dict[str, str]], working_directory: Path, passphrase: str):
     plain_ledger = json.dumps(ledger)
@@ -45,6 +43,7 @@ def dump_ledger(ledger: list[dict[str, str]], working_directory: Path, passphras
     )
 
     out = (working_directory / LEDGER_FILE).write_bytes(cmd.stdout)
+
 
 def get_ledger(working_directory: Path, passphrase: str) -> list[dict[str, str]]:
     ledger_path = working_directory / LEDGER_FILE
@@ -77,6 +76,7 @@ def get_ledger(working_directory: Path, passphrase: str) -> list[dict[str, str]]
 # Utils
 ################################################################################
 
+
 def generate_file_name(working_directory: Path) -> str:
     name = None
 
@@ -84,13 +84,14 @@ def generate_file_name(working_directory: Path) -> str:
         name = random.randbytes(8).hex()
 
         if not (working_directory / name).exists():
-            break;
+            break
 
     if not name:
         print("Was not able to generate a random name for file")
         sys.exit(5)
 
     return name
+
 
 def encrypt_file(plain_file_path: Path, cypher_file_path: Path, passphrase: str):
     cmd = subprocess.run(
@@ -107,6 +108,7 @@ def encrypt_file(plain_file_path: Path, cypher_file_path: Path, passphrase: str)
         check=True,
     )
 
+
 def decrypt_file(cypher_file_path: Path, plain_file_path: Path, passphrase: str):
     cmd = subprocess.run(
         [
@@ -122,28 +124,44 @@ def decrypt_file(cypher_file_path: Path, plain_file_path: Path, passphrase: str)
         check=True,
     )
 
+
 def lookup_mask(mask_file_name: str, ledger: list[dict[str, str]]) -> str | None:
-    return next((x[FIELD_PLAIN] for x in ledger if x[FIELD_MASK] == mask_file_name), None)
+    return next(
+        (x[FIELD_PLAIN] for x in ledger if x[FIELD_MASK] == mask_file_name), None
+    )
+
 
 ################################################################################
 # Commands
 ################################################################################
 
-def add(plain_file_path: Path,  ledger: list[dict[str, str]], working_directory: Path, passphrase: str):
-    plain_file_name = plain_file_path.name # .encode("utf-8")
+
+def add(
+    plain_file_path: Path,
+    ledger: list[dict[str, str]],
+    working_directory: Path,
+    passphrase: str,
+):
+    plain_file_name = plain_file_path.name
     mask_file_name = generate_file_name(working_directory)
     cypher_file_path = working_directory / mask_file_name
     encrypt_file(plain_file_path, cypher_file_path, passphrase)
     ledger.append(new_entry(str(plain_file_name), mask_file_name))
     dump_ledger(ledger, working_directory, passphrase)
-    print(f'Encrypted file as: {cypher_file_path}')
+    print(f"Encrypted file as: {cypher_file_path}")
 
-def v_open(cypher_file_path: Path, ledger: list[dict[str, str]], tmpfs_directory: Path, passphrase: str):
+
+def v_open(
+    cypher_file_path: Path,
+    ledger: list[dict[str, str]],
+    tmpfs_directory: Path,
+    passphrase: str,
+):
     mask_file_name = cypher_file_path.name
     plain_file_name = lookup_mask(mask_file_name, ledger)
 
     if not plain_file_name:
-        print(f'Could not find file in ledger: {mask_file_name}')
+        print(f"Could not find file in ledger: {mask_file_name}")
         sys.exit(6)
 
     temp_path = tmpfs_directory / plain_file_name
@@ -153,22 +171,29 @@ def v_open(cypher_file_path: Path, ledger: list[dict[str, str]], tmpfs_directory
         sys.exit(3)
 
     decrypt_file(cypher_file_path, temp_path, passphrase)
-    print(f'Decrypted file as: {temp_path.resolve().as_posix()}')
+    print(f"Decrypted file as: {temp_path.resolve().as_posix()}")
+
 
 def v_list(ledger: list[dict[str, str]]):
-    print("\n".join(map(lambda l: f'{l[FIELD_MASK]}: {l[FIELD_PLAIN]}', ledger)))
+    print("\n".join(map(lambda l: f"{l[FIELD_MASK]}: {l[FIELD_PLAIN]}", ledger)))
 
-def drop(cypher_file_path: Path, ledger: list[dict[str, str]], working_directory: Path, passphrase: str):
+
+def drop(
+    cypher_file_path: Path,
+    ledger: list[dict[str, str]],
+    working_directory: Path,
+    passphrase: str,
+):
     cypher_file_name = cypher_file_path.name
     ledger = list(filter(lambda l: l[FIELD_MASK] != cypher_file_name, ledger))
     dump_ledger(ledger, working_directory, passphrase)
-    print(f'Dropped {cypher_file_name}')
-
+    print(f"Dropped {cypher_file_name}")
 
 
 ################################################################################
 # Main
 ################################################################################
+
 
 def get_path() -> Path:
     given_path = Path(sys.argv[2])
@@ -179,6 +204,7 @@ def get_path() -> Path:
         sys.exit(2)
 
     return given_path
+
 
 if __name__ == "__main__":
     mode = sys.argv[1]
@@ -194,7 +220,7 @@ if __name__ == "__main__":
         sys.exit(3)
 
     # Prompt passphrase
-    passphrase = input("Passphrase: ") # .encode("utf-8")
+    passphrase = input("Passphrase: ")
 
     # Decrypt ledger
     ledger = get_ledger(working_directory, passphrase)
