@@ -13,7 +13,8 @@ def substitute(c: str) -> str:
         (")", ""),
         ("'", ""),
         ('"', ""),
-        ('!', ''),
+        ("!", ""),
+        (",", ""),
     ]
 
     for original, replacement in replace:
