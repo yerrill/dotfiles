@@ -6,6 +6,7 @@
 # vault list        - List all files in ledger
 
 import sys
+import os
 import subprocess
 import json
 import random
@@ -16,6 +17,7 @@ FIELD_MASK = "mask"
 ENTRY_FIELDS = [FIELD_PLAIN, FIELD_MASK]
 TMPFS = Path("/tmp/").resolve()
 LEDGER_FILE = ".ledger"
+VAULT_ENV = "VAULTPASS"
 
 ################################################################################
 # Ledger entries
@@ -249,8 +251,11 @@ if __name__ == "__main__":
         print(f"{TMPFS} not a tmpfs")
         sys.exit(3)
 
-    # Prompt passphrase
-    passphrase = input("Passphrase: ")
+    passphrase = os.getenv(VAULT_ENV)
+        
+    if not passphrase:
+        print(f"{VAULT_ENV} not set")
+        sys.exit(1)
 
     # Decrypt ledger
     ledger = get_ledger(working_directory, passphrase)
