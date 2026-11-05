@@ -195,6 +195,15 @@ def mode_open(
     tmpfs_directory: Path,
     passphrase: str,
 ):
+    # Check standard tmpfs is a temporary filesystem
+    cmd = subprocess.run(
+        ["findmnt", "-o", "FSTYPE", TMPFS.as_posix()], capture_output=True, check=True
+    )
+
+    if "tmpfs" not in str(cmd.stdout):
+        print(f"{TMPFS} not a tmpfs")
+        sys.exit(3)
+
     for p in cypher_file_paths:
         ledger = open_one(p, ledger, tmpfs_directory, passphrase)
 
@@ -214,6 +223,24 @@ def mode_drop(
 
 def mode_list(ledger: list[dict[str, str]]):
     print("\n".join(map(lambda l: f"{l[FIELD_MASK]}: {l[FIELD_PLAIN]}", ledger)))
+
+
+def mode_diff(ledger: list[dict[str, str]], working_directory: Path):
+    dir_files = {p.name for p in working_directory.iterdir() if p.name != LEDGER_FILE}
+    ledger_files = {l[FIELD_MASK] for l in ledger}
+
+    intersection = dir_files.intersection(ledger_files)
+    dir_only = dir_files.difference(ledger_files)
+    ledger_only = ledger_files.difference(dir_files)
+
+    if len(intersection) > 0:
+        print(f"Both:\n{"\n".join(intersection)}")
+
+    if len(dir_only) > 0:
+        print(f"Directory Only:\n{"\n".join(dir_only)}")
+
+    if len(ledger_only) > 0:
+        print(f"Ledger Only:\n{"\n".join(ledger_only)}")
 
 
 ################################################################################
@@ -242,17 +269,9 @@ if __name__ == "__main__":
     mode = sys.argv[1]
     working_directory = Path.cwd()
 
-    # Check standard tmpfs is a temporary filesystem
-    cmd = subprocess.run(
-        ["findmnt", "-o", "FSTYPE", TMPFS.as_posix()], capture_output=True, check=True
-    )
-
-    if "tmpfs" not in str(cmd.stdout):
-        print(f"{TMPFS} not a tmpfs")
-        sys.exit(3)
-
+    # Get passphrase
     passphrase = os.getenv(VAULT_ENV)
-        
+
     if not passphrase:
         print(f"{VAULT_ENV} not set")
         sys.exit(1)
@@ -269,6 +288,8 @@ if __name__ == "__main__":
         mode_drop(get_paths(), ledger, working_directory, passphrase)
     elif mode in ["list"]:
         mode_list(ledger)
+    elif mode in ["diff"]:
+        mode_diff(ledger, working_directory)
     else:
         print(f"Invalid mode: {mode}")
         sys.exit(1)
